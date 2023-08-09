@@ -1,0 +1,6 @@
+.idea
+.vs
+cmake-build-debug/*
+cmake-build-release/*
+out/*
+result/*
