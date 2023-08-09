@@ -50,7 +50,6 @@ int main() {
 
     // 多张图片推理
     inference.multi(image_dir, save_dir);
-    cout << 0 << endl;
     return 0;
 }
 ```
