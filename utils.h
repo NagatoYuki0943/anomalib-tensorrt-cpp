@@ -62,15 +62,16 @@ cv::Mat readImage(string& path);
  * @param image_path 输入图片的路径
  * @param save_dir   保存的路径
  */
-void saveScoreAndImages(float score, vector<cv::Mat>& images, cv::String& image_path, string& save_dir);
+void saveScoreAndImages(float score, cv::Mat image, cv::String& image_path, string& save_dir);
 
 
 /**
  * 图片预处理
  * @param image 预处理图片
+ * @param efficient_ad 是否使用efficient_ad模型
  * @return      经过预处理的图片
  */
-cv::Mat pre_process(cv::Mat& image, MetaData& meta);
+cv::Mat pre_process(cv::Mat& image, MetaData& meta, bool efficient_ad = false);
 
 
 /**
@@ -119,7 +120,7 @@ cv::Mat addLabel(cv::Mat& mixed_image, float score, int font = cv::FONT_HERSHEY_
 /**
  * 推理结果：热力图 + 得分
  */
-struct Result{
+struct Result {
 public:
     cv::Mat anomaly_map;
     float score;
@@ -134,7 +135,7 @@ public:
  * @param kernel_size 开操作kernel_size
  * @return mask
  */
-cv::Mat compute_mask(cv::Mat& anomaly_map, float threshold=0.5, int kernel_size=1);
+cv::Mat compute_mask(cv::Mat& anomaly_map, float threshold = 0.5, int kernel_size = 1);
 
 
 /**
@@ -156,4 +157,4 @@ cv::Mat gen_mask_border(cv::Mat& mask, cv::Mat& image);
  * @param threshold    热力图二值化阈值
  * @return
  */
-vector<cv::Mat> gen_images(cv::Mat& image, cv::Mat& anomaly_map, float score, float threshold=0.5);
+vector<cv::Mat> gen_images(cv::Mat& image, cv::Mat& anomaly_map, float score, float threshold = 0.5);

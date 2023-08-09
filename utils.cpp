@@ -48,7 +48,7 @@ cv::Mat readImage(string& path) {
 }
 
 
-void saveScoreAndImages(float score, vector<cv::Mat>& images, cv::String& image_path, string& save_dir) {
+void saveScoreAndImages(float score, cv::Mat image, cv::String& image_path, string& save_dir) {
     // 获取图片文件名
     // 这样基本确保无论使用 \ / 作为分隔符都能找到文件名字
     auto start = image_path.rfind('\\');
@@ -64,15 +64,12 @@ void saveScoreAndImages(float score, vector<cv::Mat>& images, cv::String& image_
     ofs << score;
     ofs.close();
 
-    cv::Mat res;
-    cv::hconcat(images, res);
-
     // 写入图片
-    cv::imwrite(save_dir + "/" + image_name + ".jpg", res);
+    cv::imwrite(save_dir + "/" + image_name + ".jpg", image);
 }
 
 
-cv::Mat pre_process(cv::Mat& image, MetaData& meta) {
+cv::Mat pre_process(cv::Mat& image, MetaData& meta, bool efficient_ad) {
     vector<float> mean = { 0.485, 0.456, 0.406 };
     vector<float> std = { 0.229, 0.224, 0.225 };
 
@@ -84,8 +81,10 @@ cv::Mat pre_process(cv::Mat& image, MetaData& meta) {
     resized_image.convertTo(resized_image, CV_32FC3, 1.0 / 255, 0);
     //cv::normalize(resized_image, resized_image, 0, 1, cv::NormTypes::NORM_MINMAX, CV_32FC3);
 
-    // 标准化
-    resized_image = Normalize(resized_image, mean, std);
+    if (!efficient_ad) {
+        // 标准化
+        resized_image = Normalize(resized_image, mean, std);
+    }
     return resized_image;
 }
 
@@ -106,6 +105,7 @@ vector<cv::Mat> post_process(cv::Mat& anomaly_map, cv::Mat& pred_score, MetaData
     // 标准化热力图和得分
     anomaly_map = cvNormalizeMinMax(anomaly_map, meta.pixel_threshold, meta.min, meta.max);
     pred_score = cvNormalizeMinMax(pred_score, meta.image_threshold, meta.min, meta.max);
+
     // 还原到原图尺寸
     anomaly_map = Resize(anomaly_map, meta.image_size[0], meta.image_size[1], "bilinear");
 

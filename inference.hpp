@@ -41,6 +41,7 @@ inline unsigned int getElementSize(nvinfer1::DataType t)
 
 class Inference {
 private:
+    bool efficient_ad;                      // 是否使用efficient_ad模型
     MetaData meta{};                        // 超参数
     nvinfer1::ICudaEngine* engine;          // model    
     nvinfer1::IExecutionContext* context;   // contenx
@@ -55,9 +56,10 @@ public:
      * @param model_path    模型路径
      * @param meta_path     超参数路径
      * @param device        cpu or cuda or tensorrt 推理
-
+     * @param efficient_ad  是否使用efficient_ad模型
      */
-    Inference(string& model_path, string& meta_path) {
+    Inference(string& model_path, string& meta_path, bool efficient_ad = false) {
+        this->efficient_ad = efficient_ad;
         // 1.读取meta
         this->meta = getJson(meta_path);
         // 2.创建模型
@@ -106,7 +108,7 @@ public:
         for (int i = 0; i < nbBindings; i++) {
             string name = this->engine->getIOTensorName(i);
             nvinfer1::TensorIOMode mode = this->engine->getTensorIOMode(name.c_str());
-            cout << "mode: " << int(mode) << endl; // 0:input or output  1:input  2:output
+            // cout << "mode: " << int(mode) << endl; // 0:input or output  1:input  2:output
             nvinfer1::DataType dtype = this->engine->getTensorDataType(name.c_str());
             nvinfer1::Dims dims = this->engine->getTensorShape(name.c_str());
             int totalSize = volume(dims) * getElementSize(dtype);
@@ -149,7 +151,7 @@ public:
 
         // 2.图片预处理
         cv::Mat resized_image;
-        resized_image = pre_process(image, meta);
+        resized_image = pre_process(image, meta, this->efficient_ad);
         resized_image = cv::dnn::blobFromImage(resized_image);
 
         // 3.infer
@@ -166,13 +168,20 @@ public:
         // 4.将热力图转换为Mat
         cv::Mat anomaly_map;
         cv::Mat pred_score;
-        if (this->output_nums == 2) {
+        if (this->output_nums == 1) {
+            anomaly_map = cv::Mat(cv::Size(this->meta.infer_size[1], this->meta.infer_size[0]), CV_32FC1, this->outputs[0]);
+            double _, maxValue;    // 最大值，最小值
+            cv::minMaxLoc(anomaly_map, &_, &maxValue);
+            pred_score = cv::Mat(cv::Size(1, 1), CV_32FC1, maxValue);
+        }
+        else if (this->output_nums == 2) {
             // patchcore的输出[0]为得分,[1]为map
             anomaly_map = cv::Mat(cv::Size(this->meta.infer_size[1], this->meta.infer_size[0]), CV_32FC1, this->outputs[1]);
             pred_score = cv::Mat(cv::Size(1, 1), CV_32FC1, this->outputs[0]);  // {1}
         }
-        else {
-            anomaly_map = cv::Mat(cv::Size(this->meta.infer_size[1], this->meta.infer_size[0]), CV_32FC1, this->outputs[0]);
+        else if (this->output_nums == 3) {
+            // efficient_ad有3个输出结果, [2]才是anomaly_map
+            anomaly_map = cv::Mat(cv::Size(this->meta.infer_size[1], this->meta.infer_size[0]), CV_32FC1, this->outputs[2]);
             double _, maxValue;    // 最大值，最小值
             cv::minMaxLoc(anomaly_map, &_, &maxValue);
             pred_score = cv::Mat(cv::Size(1, 1), CV_32FC1, maxValue);
@@ -212,9 +221,12 @@ public:
         // 4.保存显示图片
         // 将mask转化为3通道,不然没法拼接图片
         cv::applyColorMap(images[0], images[0], cv::ColormapTypes::COLORMAP_JET);
-        saveScoreAndImages(result.score, images, image_path, save_dir);
+        // 拼接图片
+        cv::Mat res;
+        cv::hconcat(images, res);
+        saveScoreAndImages(result.score, res, image_path, save_dir);
 
-        return images[2];
+        return res;
     }
 
     /**
@@ -247,7 +259,10 @@ public:
             // 5.保存图片
             // 将mask转化为3通道,不然没法拼接图片
             cv::applyColorMap(images[0], images[0], cv::ColormapTypes::COLORMAP_JET);
-            saveScoreAndImages(result.score, images, image_path, save_dir);
+            // 拼接图片
+            cv::Mat res;
+            cv::hconcat(images, res);
+            saveScoreAndImages(result.score, res, image_path, save_dir);
         }
 
         // 6.统计数据
