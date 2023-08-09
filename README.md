@@ -87,7 +87,7 @@ $tensorrt\lib
 
 > cmake版本要设置 `CMakeLists.txt` 中 opencv，tensorrt 路径为自己的路径
 
-## 查看是否缺失dll
+# 查看是否缺失dll
 
 > https://github.com/lucasg/Dependencies 这个工具可以查看exe工具是否缺失dll
 
