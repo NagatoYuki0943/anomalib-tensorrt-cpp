@@ -2,7 +2,7 @@
 
 > 适用于anomalib导出的onnx格式的模型
 >
-> 测试了 patchcore,fastflow,efficient_ad模型
+> 测试了patchcore,fastflow,efficient_ad模型
 
 ```yaml
 # 模型配置文件中设置为onnx,导出openvino会导出onnx
@@ -65,6 +65,9 @@ int main() {
 > [cuDNN Archive | NVIDIA Developer](https://developer.nvidia.com/rdp/cudnn-archive)
 >
 > [NVIDIA Developer Program Membership Required | NVIDIA Developer](https://developer.nvidia.com/nvidia-tensorrt-download)
+>
+> 测试tensorrt版本:8.6.1
+> 
 
 > https://opencv.org
 
