@@ -43,7 +43,7 @@ class Inference {
 private:
     bool efficient_ad;                      // 是否使用efficient_ad模型
     MetaData meta{};                        // 超参数
-    nvinfer1::ICudaEngine* engine;          // model    
+    nvinfer1::ICudaEngine* engine;          // model
     nvinfer1::IExecutionContext* context;   // contenx
     cudaStream_t stream;                    // async stream
     void* cudaBuffers[4];                   // 分配显存空间
@@ -55,7 +55,6 @@ public:
     /**
      * @param model_path    模型路径
      * @param meta_path     超参数路径
-     * @param device        cpu or cuda or tensorrt 推理
      * @param efficient_ad  是否使用efficient_ad模型
      */
     Inference(string& model_path, string& meta_path, bool efficient_ad = false) {
@@ -164,7 +163,7 @@ public:
             // cudaMemcpyAsync(this->outputs[i-1], this->cudaBuffers[i], this->bufferSize[i], cudaMemcpyDeviceToHost, this->stream);
         }
         // cudaStreamSynchronize(stream);
- 
+
         // 4.将热力图转换为Mat
         cv::Mat anomaly_map;
         cv::Mat pred_score;
@@ -194,7 +193,7 @@ public:
         float score = result[1].at<float>(0, 0);
 
         // 6.返回结果
-         return Result{ anomaly_map, score };
+        return Result{ anomaly_map, score };
     }
 
     /**
