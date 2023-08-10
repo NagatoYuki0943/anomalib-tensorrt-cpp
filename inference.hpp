@@ -126,7 +126,6 @@ public:
         cudaStreamCreate(&this->stream);
     }
 
-
     /**
      * 模型预热
      */
@@ -135,7 +134,7 @@ public:
         cv::Size size = cv::Size(this->meta.infer_size[1], this->meta.infer_size[0]);
         cv::Scalar color = cv::Scalar(0, 0, 0);
         cv::Mat input = cv::Mat(size, CV_8UC3, color);
-        // this->infer(input);
+        this->infer(input);
     }
 
     ///**
@@ -149,13 +148,12 @@ public:
         this->meta.image_size[1] = image.size[1];
 
         // 2.图片预处理
-        cv::Mat resized_image;
-        resized_image = pre_process(image, meta, this->efficient_ad);
-        resized_image = cv::dnn::blobFromImage(resized_image);
+        cv::Mat resized_image = pre_process(image, meta, this->efficient_ad);
+        cv::Mat blob = cv::dnn::blobFromImage(resized_image);
 
         // 3.infer
         // DMA the input to the GPU,  execute the batch asynchronously, and DMA it back:
-        cudaMemcpy(this->cudaBuffers[0], resized_image.ptr<float>(), this->bufferSize[0], cudaMemcpyHostToDevice);
+        cudaMemcpy(this->cudaBuffers[0], blob.ptr<float>(), this->bufferSize[0], cudaMemcpyHostToDevice);
         // cudaMemcpyAsync(this->cudaBuffers[0], image.ptr<float>(), this->bufferSize[0], cudaMemcpyHostToDevice, this->stream);  // 异步没有把数据移动上去,很奇怪
         context->executeV2(this->cudaBuffers);
         for (size_t i = 1; i <= this->output_nums; i++) {
