@@ -43,6 +43,7 @@ class Inference {
 private:
     bool efficient_ad;                      // 是否使用efficient_ad模型
     MetaData meta{};                        // 超参数
+    nvinfer1::IRuntime* trtRuntime;         // runtime
     nvinfer1::ICudaEngine* engine;          // model
     nvinfer1::IExecutionContext* context;   // contenx
     cudaStream_t stream;                    // async stream
@@ -67,6 +68,13 @@ public:
         this->warm_up();
     }
 
+    ~Inference() {
+        // 析构顺序很重要
+        this->context->destroy();
+        this->engine->destroy();
+        this->trtRuntime->destroy();
+    }
+
     /**
      * get onnx model
      * @param model_path    模型路径
@@ -88,9 +96,9 @@ public:
         }
         file.close();
 
-        nvinfer1::IRuntime* trtRuntime = nvinfer1::createInferRuntime(sample::gLogger.getTRTLogger());
+        this->trtRuntime = nvinfer1::createInferRuntime(sample::gLogger.getTRTLogger());
         initLibNvInferPlugins(&sample::gLogger, "");
-        this->engine = trtRuntime->deserializeCudaEngine(cached_engine.data(), cached_engine.size(), nullptr);
+        this->engine = this->trtRuntime->deserializeCudaEngine(cached_engine.data(), cached_engine.size(), nullptr);
         std::cout << "deserialize done" << std::endl;
         /******************** load engine ********************/
 
