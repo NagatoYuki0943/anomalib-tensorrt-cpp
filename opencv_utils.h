@@ -4,6 +4,8 @@
 
 #include "opencv2/opencv.hpp"
 
+using namespace std;
+
 /**
  * @brief resize an image to specified size
  *
@@ -13,7 +15,7 @@
  * @return output image if success, error code otherwise
  */
 cv::Mat Resize(const cv::Mat& src, int dst_height, int dst_width,
-               const std::string& interpolation);
+               const string& interpolation);
 
 /**
  * @brief crop an image
@@ -42,8 +44,8 @@ cv::Mat Divide(const cv::Mat& src, float divide=255.0);
  * @param inplace
  * @return cv::Mat
  */
-cv::Mat Normalize(cv::Mat& src, const std::vector<float>& mean,
-                  const std::vector<float>& std, bool to_rgb = false, bool inplace = true);
+cv::Mat Normalize(cv::Mat& src, const vector<float>& mean,
+                  const vector<float>& std, bool to_rgb = false, bool inplace = true);
 
 /**
  * @brief tranpose an image, from {h, w, c} to {c, h, w}

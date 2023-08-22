@@ -20,7 +20,7 @@ using namespace std;
 
 inline int64_t volume(const nvinfer1::Dims& d)
 {
-    return std::accumulate(d.d, d.d + d.nbDims, 1, std::multiplies<int64_t>());
+    return accumulate(d.d, d.d + d.nbDims, 1, multiplies<int64_t>());
 }
 
 
@@ -34,7 +34,7 @@ inline unsigned int getElementSize(nvinfer1::DataType t)
     case nvinfer1::DataType::kBOOL:
     case nvinfer1::DataType::kINT8: return 1;
     }
-    throw std::runtime_error("Invalid DataType.");
+    throw runtime_error("Invalid DataType.");
     return 0;
 }
 
@@ -49,9 +49,9 @@ private:
     nvinfer1::IExecutionContext* context;   // contenx
     cudaStream_t stream;                    // async stream
     void* cudaBuffers[4];                   // 分配显存空间
-    std::vector<int> bufferSize;            // 每个显存空间占用大小
+    vector<int> bufferSize;                 // 每个显存空间占用大小
     int output_nums;                        // 模型输出个数
-    std::vector<float*> outputs;            // 分配输出内存空间
+    vector<float*> outputs;                 // 分配输出内存空间
 
 public:
     /**
@@ -89,15 +89,15 @@ public:
     void get_model(string& model_path) {
         /******************** load engine ********************/
         string cached_engine;
-        std::fstream file;
-        std::cout << "loading filename from:" << model_path << std::endl;
-        file.open(model_path, std::ios::binary | std::ios::in);
+        fstream file;
+        cout << "loading filename from:" << model_path << endl;
+        file.open(model_path, ios::binary | ios::in);
         if (!file.is_open()) {
-            std::cout << "read file error: " << model_path << std::endl;
+            cout << "read file error: " << model_path << endl;
             cached_engine = "";
         }
         while (file.peek() != EOF) {
-            std::stringstream buffer;
+            stringstream buffer;
             buffer << file.rdbuf();
             cached_engine.append(buffer.str());
         }
@@ -106,7 +106,7 @@ public:
         this->trtRuntime = nvinfer1::createInferRuntime(sample::gLogger.getTRTLogger());
         initLibNvInferPlugins(&sample::gLogger, "");
         this->engine = this->trtRuntime->deserializeCudaEngine(cached_engine.data(), cached_engine.size(), nullptr);
-        std::cout << "deserialize done" << std::endl;
+        cout << "deserialize done" << endl;
         /******************** load engine ********************/
 
         /********************** binding **********************/
@@ -122,7 +122,7 @@ public:
         for (int i = 0; i < nbBindings; i++) {
             string name = this->engine->getIOTensorName(i);
             int mode = int(this->engine->getTensorIOMode(name.c_str()));
-            cout << "mode: " << mode << endl; // 0:input or output  1:input  2:output
+            // cout << "mode: " << mode << endl; // 0:input or output  1:input  2:output
             nvinfer1::DataType dtype = this->engine->getTensorDataType(name.c_str());
             nvinfer1::Dims dims = this->context->getTensorShape(name.c_str());
 
@@ -141,8 +141,7 @@ public:
             }
 
             int totalSize = volume(dims) * getElementSize(dtype);
-            cout << "totalSize: " << totalSize << endl;
-            bufferSize[i] = totalSize;
+            this->bufferSize[i] = totalSize;
             cudaMalloc(&this->cudaBuffers[i], totalSize); // 分配显存空间
 
             if (mode == 2) {                         // 分配输出内存空间
@@ -150,6 +149,7 @@ public:
                 float* output = new float[outSize];
                 this->outputs.push_back(output);
             }
+            fprintf(stderr, "name: %s, mode: %d, dims: [%d, %d, %d, %d], totalSize: %d\n", name.c_str(), mode, dims.d[0], dims.d[1], dims.d[2], dims.d[3], totalSize);
         }
         /********************** binding **********************/
 
@@ -168,10 +168,11 @@ public:
         if (this->dynamic_batch_size == 1) {
             this->infer(image);
         }
-        //else {
-        //    std::vector<cv::Mat> images(dynamic_batch_size, image);
-        //    this->dynamicBatchInfer(images);
-        //}
+        else {
+            vector<cv::Mat> images(dynamic_batch_size, image);
+            this->dynamicBatchInfer(images);
+        }
+        cout << "warm up finish" << endl;
     }
 
     ///**
@@ -313,13 +314,13 @@ public:
      * @param image 原始图片
      * @return      标准化的并所放到原图热力图和得分
      */
-    std::vector<Result> dynamicBatchInfer(std::vector<cv::Mat> images) {
+    vector<Result> dynamicBatchInfer(vector<cv::Mat> images) {
         // 1.保存图片原始高宽,使用第一张图片,假设图片大小都一致
         this->meta.image_size[0] = images[0].size().height;
         this->meta.image_size[1] = images[0].size().width;
 
         // 2.图片预处理,图片顺序处理
-        std::vector<cv::Mat> resized_images;
+        vector<cv::Mat> resized_images;
         for (cv::Mat image : images) {
             resized_images.push_back(pre_process(image, this->meta, this->efficient_ad));
         }
@@ -334,20 +335,22 @@ public:
         }
 
         // 4.获取结果
-        std::vector<cv::Mat> anomaly_maps;
-        std::vector<cv::Mat> pred_scores;
-
+        vector<cv::Mat> anomaly_maps;
+        vector<cv::Mat> pred_scores;
         int total_infer_length = this->meta.infer_size[0] * this->meta.infer_size[1] * this->dynamic_batch_size;
         int infer_length = this->meta.infer_size[0] * this->meta.infer_size[1];
-        cout << "total_infer_length = " << total_infer_length << endl;
-        cout << "infer_length = " << infer_length << endl;
-        std::vector<float*> temp(this->dynamic_batch_size, new float[infer_length]);
+
+        // vector<float*> temp_results(this->dynamic_batch_size, new float[infer_length]); // 这样初始化会导致多个结果内存地址相同
+        vector<float*> temp_results;
+        for (int i = 0; i < this->dynamic_batch_size; i++) {
+            temp_results.push_back(new float[infer_length]);
+        }
         if (this->output_nums == 1) {
             for (int i = 0; i < total_infer_length; i++) {
-                temp[i / infer_length][i % infer_length] = this->outputs[0][i];
+                temp_results[i / infer_length][i % infer_length] = this->outputs[0][i];
             }
             for (int i = 0; i < this->dynamic_batch_size; i++) {
-                cv::Mat temp_anomaly_map = cv::Mat(cv::Size(this->meta.infer_size[1], this->meta.infer_size[0]), CV_32FC1, temp[i]);
+                cv::Mat temp_anomaly_map = cv::Mat(cv::Size(this->meta.infer_size[1], this->meta.infer_size[0]), CV_32FC1, temp_results[i]);
                 anomaly_maps.push_back(temp_anomaly_map);
                 double _, maxValue;    // 最大值，最小值
                 cv::minMaxLoc(temp_anomaly_map, &_, &maxValue);
@@ -357,10 +360,10 @@ public:
         else if (this->output_nums == 2) {
             // patchcore的输出[0]为得分,[1]为map
             for (int i = 0; i < total_infer_length; i++) {
-                temp[i / infer_length][i % infer_length] = this->outputs[1][i];
+                temp_results[i / infer_length][i % infer_length] = this->outputs[1][i];
             }
             for (int i = 0; i < this->dynamic_batch_size; i++) {
-                cv::Mat temp_anomaly_map = cv::Mat(cv::Size(this->meta.infer_size[1], this->meta.infer_size[0]), CV_32FC1, temp[i]);
+                cv::Mat temp_anomaly_map = cv::Mat(cv::Size(this->meta.infer_size[1], this->meta.infer_size[0]), CV_32FC1, temp_results[i]);
                 anomaly_maps.push_back(temp_anomaly_map);
             }
             cv::Mat pred_scores_ = cv::Mat(cv::Size(1, 1), CV_32FC(this->dynamic_batch_size), this->outputs[0]);
@@ -369,24 +372,19 @@ public:
         else if (this->output_nums == 3) {
             // efficient_ad有3个输出结果, [2]才是anomaly_map
             for (int i = 0; i < total_infer_length; i++) {
-                temp[i / infer_length][i % infer_length] = this->outputs[2][i];
+                temp_results[i / infer_length][i % infer_length] = this->outputs[2][i];
             }
             for (int i = 0; i < this->dynamic_batch_size; i++) {
-                cv::Mat temp_anomaly_map = cv::Mat(cv::Size(this->meta.infer_size[1], this->meta.infer_size[0]), CV_32FC1, temp[i]);
+                cv::Mat temp_anomaly_map = cv::Mat(cv::Size(this->meta.infer_size[1], this->meta.infer_size[0]), CV_32FC1, temp_results[i]);
                 anomaly_maps.push_back(temp_anomaly_map);
                 double _, maxValue;    // 最大值，最小值
                 cv::minMaxLoc(temp_anomaly_map, &_, &maxValue);
                 pred_scores.push_back(cv::Mat(cv::Size(1, 1), CV_32FC1, maxValue));
             }
-            //cv::Mat temp_anomaly_map = cv::Mat(cv::Size(this->meta.infer_size[1], this->meta.infer_size[0]), CV_32FC1, this->outputs[2]);
-            //anomaly_maps.push_back(temp_anomaly_map);
-            //double _, maxValue;    // 最大值，最小值
-            //cv::minMaxLoc(temp_anomaly_map, &_, &maxValue);
-            //pred_scores.push_back(cv::Mat(cv::Size(1, 1), CV_32FC1, maxValue));
         }
 
         // 5.后处理,每张图片单独处理
-        std::vector<Result> results;
+        vector<Result> results;
         for (int i = 0; i < this->dynamic_batch_size; i++) {
             // 后处理
             vector<cv::Mat> post_mat = post_process(anomaly_maps[i], pred_scores[i], this->meta);

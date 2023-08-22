@@ -5,7 +5,7 @@
 
 
 cv::Mat Resize(const cv::Mat& src, int dst_height, int dst_width,
-               const std::string& interpolation) {
+               const string& interpolation) {
     cv::Mat dst(dst_height, dst_width, src.type());
     if (interpolation == "bilinear") {
         cv::resize(src, dst, dst.size(), 0, 0, cv::INTER_LINEAR);
@@ -33,7 +33,7 @@ cv::Mat Divide(const cv::Mat& src, float divide) {
     return dst;
 }
 
-cv::Mat Normalize(cv::Mat& src, const std::vector<float>& mean, const std::vector<float>& std,
+cv::Mat Normalize(cv::Mat& src, const vector<float>& mean, const vector<float>& std,
                   bool to_rgb, bool inplace) {
     assert(src.channels() == mean.size());
     assert(mean.size() == std.size());
