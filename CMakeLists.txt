@@ -40,3 +40,4 @@ link_libraries(${OpenCV_LIBS}
                 nvinfer.lib nvinfer_plugin.lib nvonnxparser.lib nvparsers.lib)
 
 add_executable(main main.cpp utils.cpp opencv_utils.cpp inference.hpp logger.cpp)
+add_executable(main_dynamic_batch main_dynamic_batch.cpp utils.cpp opencv_utils.cpp inference.hpp logger.cpp)

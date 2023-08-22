@@ -42,6 +42,7 @@ inline unsigned int getElementSize(nvinfer1::DataType t)
 class Inference {
 private:
     bool efficient_ad;                      // 是否使用efficient_ad模型
+    int dynamic_batch_size;                 // 动态batch大小
     MetaData meta{};                        // 超参数
     nvinfer1::IRuntime* trtRuntime;         // runtime
     nvinfer1::ICudaEngine* engine;          // model
@@ -57,9 +58,11 @@ public:
      * @param model_path    模型路径
      * @param meta_path     超参数路径
      * @param efficient_ad  是否使用efficient_ad模型
+     * @param dynamic_batch_size  动态batch大小,非动态batch模型不需要处理
      */
-    Inference(string& model_path, string& meta_path, bool efficient_ad = false) {
+    Inference(string& model_path, string& meta_path, bool efficient_ad = false, int dynamic_batch_size=1) {
         this->efficient_ad = efficient_ad;
+        this->dynamic_batch_size = dynamic_batch_size;
         // 1.读取meta
         this->meta = getJson(meta_path);
         // 2.创建模型
@@ -73,10 +76,14 @@ public:
         this->context->destroy();
         this->engine->destroy();
         this->trtRuntime->destroy();
+
+        for (float* fpoint : this->outputs) {
+            delete[] fpoint;
+        }
     }
 
     /**
-     * get onnx model
+     * get tensorrt model
      * @param model_path    模型路径
      */
     void get_model(string& model_path) {
@@ -114,15 +121,31 @@ public:
 
         for (int i = 0; i < nbBindings; i++) {
             string name = this->engine->getIOTensorName(i);
-            nvinfer1::TensorIOMode mode = this->engine->getTensorIOMode(name.c_str());
-            // cout << "mode: " << int(mode) << endl; // 0:input or output  1:input  2:output
+            int mode = int(this->engine->getTensorIOMode(name.c_str()));
+            cout << "mode: " << mode << endl; // 0:input or output  1:input  2:output
             nvinfer1::DataType dtype = this->engine->getTensorDataType(name.c_str());
-            nvinfer1::Dims dims = this->engine->getTensorShape(name.c_str());
+            nvinfer1::Dims dims = this->context->getTensorShape(name.c_str());
+
+            // dynamic batch
+            if ((*dims.d == -1) && (mode == 1)) {
+                nvinfer1::Dims minDims = engine->getProfileShape(name.c_str(), 0, nvinfer1::OptProfileSelector::kMIN);
+                nvinfer1::Dims optDims = engine->getProfileShape(name.c_str(), 0, nvinfer1::OptProfileSelector::kOPT);
+                nvinfer1::Dims maxDims = engine->getProfileShape(name.c_str(), 0, nvinfer1::OptProfileSelector::kMAX);
+                // 自己设置的batch必须在最小和最大batch之间
+                assert(this->dynamic_batch_size >= minDims.d[0] && this->dynamic_batch_size <= maxDims.d[0]);
+                // 显式设置batch
+                context->setInputShape(name.c_str(), nvinfer1::Dims4(this->dynamic_batch_size, maxDims.d[1], maxDims.d[2], maxDims.d[3]));
+                // 设置为最小batch
+                // context->setInputShape(name.c_str(), minDims);
+                dims = context->getTensorShape(name.c_str());
+            }
+
             int totalSize = volume(dims) * getElementSize(dtype);
+            cout << "totalSize: " << totalSize << endl;
             bufferSize[i] = totalSize;
             cudaMalloc(&this->cudaBuffers[i], totalSize); // 分配显存空间
 
-            if (int(mode) == 2) {                         // 分配输出内存空间
+            if (mode == 2) {                         // 分配输出内存空间
                 int outSize = int(totalSize / sizeof(float));
                 float* output = new float[outSize];
                 this->outputs.push_back(output);
@@ -141,8 +164,14 @@ public:
         // 输入数据
         cv::Size size = cv::Size(this->meta.infer_size[1], this->meta.infer_size[0]);
         cv::Scalar color = cv::Scalar(0, 0, 0);
-        cv::Mat input = cv::Mat(size, CV_8UC3, color);
-        this->infer(input);
+        cv::Mat image = cv::Mat(size, CV_8UC3, color);
+        if (this->dynamic_batch_size == 1) {
+            this->infer(image);
+        }
+        //else {
+        //    std::vector<cv::Mat> images(dynamic_batch_size, image);
+        //    this->dynamicBatchInfer(images);
+        //}
     }
 
     ///**
@@ -152,11 +181,11 @@ public:
     // */
     Result infer(cv::Mat & image) {
         // 1.保存图片原始高宽
-        this->meta.image_size[0] = image.size[0];
-        this->meta.image_size[1] = image.size[1];
+        this->meta.image_size[0] = image.size().height;
+        this->meta.image_size[1] = image.size().width;
 
         // 2.图片预处理
-        cv::Mat resized_image = pre_process(image, meta, this->efficient_ad);
+        cv::Mat resized_image = pre_process(image, this->meta, this->efficient_ad);
         cv::Mat blob = cv::dnn::blobFromImage(resized_image);
 
         // 3.infer
@@ -194,9 +223,9 @@ public:
         cout << "pred_score: " << pred_score << endl;   // 4.0252275
 
         // 5.后处理:标准化,缩放到原图
-        vector<cv::Mat> result = post_process(anomaly_map, pred_score, this->meta);
-        anomaly_map = result[0];
-        float score = result[1].at<float>(0, 0);
+        vector<cv::Mat> post_mat = post_process(anomaly_map, pred_score, this->meta);
+        anomaly_map = post_mat[0];
+        float score = post_mat[1].at<float>(0, 0);
 
         // 6.返回结果
         return Result{ anomaly_map, score };
@@ -254,7 +283,7 @@ public:
             Result result = this->infer(image);
             cout << "score: " << result.score << endl;
 
-            // 4.图片生成其他图片(mask,mask边缘,热力图和原图的叠加)
+            // 4.生成其他图片(mask,mask边缘,热力图和原图的叠加)
             vector<cv::Mat> images = gen_images(image, result.anomaly_map, result.score);
             // time
             auto end = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
@@ -274,5 +303,110 @@ public:
         double sumValue = accumulate(begin(times), end(times), 0.0); // accumulate函数就是求vector和的函数；
         double avgValue = sumValue / times.size();                   // 求均值
         cout << "avg infer time: " << avgValue << " ms" << endl;
+    }
+
+
+    /**
+     * 动态batch推理,要保证输入图片的大小都相同
+     * 图片前后处理是顺序进行的,推理是batch推理
+     *
+     * @param image 原始图片
+     * @return      标准化的并所放到原图热力图和得分
+     */
+    std::vector<Result> dynamicBatchInfer(std::vector<cv::Mat> images) {
+        // 1.保存图片原始高宽,使用第一张图片,假设图片大小都一致
+        this->meta.image_size[0] = images[0].size().height;
+        this->meta.image_size[1] = images[0].size().width;
+
+        // 2.图片预处理,图片顺序处理
+        std::vector<cv::Mat> resized_images;
+        for (cv::Mat image : images) {
+            resized_images.push_back(pre_process(image, this->meta, this->efficient_ad));
+        }
+        cv::Mat blob = cv::dnn::blobFromImages(resized_images);
+
+        // 3.infer
+        // DMA the input to the GPU,  execute the batch asynchronously, and DMA it back:
+        cudaMemcpy(this->cudaBuffers[0], blob.ptr<float>(), this->bufferSize[0], cudaMemcpyHostToDevice);
+        context->executeV2(this->cudaBuffers);
+        for (size_t i = 1; i <= this->output_nums; i++) {
+            cudaMemcpy(this->outputs[i - 1], this->cudaBuffers[i], this->bufferSize[i], cudaMemcpyDeviceToHost);
+        }
+
+        // 4.获取结果
+        std::vector<cv::Mat> anomaly_maps;
+        std::vector<cv::Mat> pred_scores;
+
+        int total_infer_length = this->meta.infer_size[0] * this->meta.infer_size[1] * this->dynamic_batch_size;
+        int infer_length = this->meta.infer_size[0] * this->meta.infer_size[1];
+        cout << "total_infer_length = " << total_infer_length << endl;
+        cout << "infer_length = " << infer_length << endl;
+        std::vector<float*> temp(this->dynamic_batch_size, new float[infer_length]);
+        if (this->output_nums == 1) {
+            for (int i = 0; i < total_infer_length; i++) {
+                temp[i / infer_length][i % infer_length] = this->outputs[0][i];
+            }
+            for (int i = 0; i < this->dynamic_batch_size; i++) {
+                cv::Mat temp_anomaly_map = cv::Mat(cv::Size(this->meta.infer_size[1], this->meta.infer_size[0]), CV_32FC1, temp[i]);
+                anomaly_maps.push_back(temp_anomaly_map);
+                double _, maxValue;    // 最大值，最小值
+                cv::minMaxLoc(temp_anomaly_map, &_, &maxValue);
+                pred_scores.push_back(cv::Mat(cv::Size(1, 1), CV_32FC1, maxValue));
+            }
+        }
+        else if (this->output_nums == 2) {
+            // patchcore的输出[0]为得分,[1]为map
+            for (int i = 0; i < total_infer_length; i++) {
+                temp[i / infer_length][i % infer_length] = this->outputs[1][i];
+            }
+            for (int i = 0; i < this->dynamic_batch_size; i++) {
+                cv::Mat temp_anomaly_map = cv::Mat(cv::Size(this->meta.infer_size[1], this->meta.infer_size[0]), CV_32FC1, temp[i]);
+                anomaly_maps.push_back(temp_anomaly_map);
+            }
+            cv::Mat pred_scores_ = cv::Mat(cv::Size(1, 1), CV_32FC(this->dynamic_batch_size), this->outputs[0]);
+            cv::split(pred_scores_, pred_scores);
+        }
+        else if (this->output_nums == 3) {
+            // efficient_ad有3个输出结果, [2]才是anomaly_map
+            for (int i = 0; i < total_infer_length; i++) {
+                temp[i / infer_length][i % infer_length] = this->outputs[2][i];
+            }
+            for (int i = 0; i < this->dynamic_batch_size; i++) {
+                cv::Mat temp_anomaly_map = cv::Mat(cv::Size(this->meta.infer_size[1], this->meta.infer_size[0]), CV_32FC1, temp[i]);
+                anomaly_maps.push_back(temp_anomaly_map);
+                double _, maxValue;    // 最大值，最小值
+                cv::minMaxLoc(temp_anomaly_map, &_, &maxValue);
+                pred_scores.push_back(cv::Mat(cv::Size(1, 1), CV_32FC1, maxValue));
+            }
+            //cv::Mat temp_anomaly_map = cv::Mat(cv::Size(this->meta.infer_size[1], this->meta.infer_size[0]), CV_32FC1, this->outputs[2]);
+            //anomaly_maps.push_back(temp_anomaly_map);
+            //double _, maxValue;    // 最大值，最小值
+            //cv::minMaxLoc(temp_anomaly_map, &_, &maxValue);
+            //pred_scores.push_back(cv::Mat(cv::Size(1, 1), CV_32FC1, maxValue));
+        }
+
+        // 5.后处理,每张图片单独处理
+        std::vector<Result> results;
+        for (int i = 0; i < this->dynamic_batch_size; i++) {
+            // 后处理
+            vector<cv::Mat> post_mat = post_process(anomaly_maps[i], pred_scores[i], this->meta);
+            cv::Mat image = images[i];
+            cv::Mat anomaly_map = post_mat[0];
+            float score = post_mat[1].at<float>(0, 0);
+
+            // 生成其他图片(mask,mask边缘,热力图和原图的叠加)
+            vector<cv::Mat> images3 = gen_images(image, anomaly_map, score);
+
+            // 将mask转化为3通道,不然没法拼接图片
+            cv::applyColorMap(images3[0], images3[0], cv::ColormapTypes::COLORMAP_JET);
+
+            // 拼接图片
+            cv::Mat res;
+            cv::hconcat(images3, res);
+            results.push_back(Result{ res , score });
+        }
+
+        // 6.返回结果
+        return results;
     }
 };
