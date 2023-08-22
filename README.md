@@ -83,7 +83,7 @@ int main() {
 
 2. 方法2(不需要重新训练模型,但不保证成功)
 
-> 使用 [onnx-modifier](https://github.com/ZhangGe6/onnx-modifier)将模型的batch调整为动态的
+> 使用 [onnx-modifier](https://github.com/ZhangGe6/onnx-modifier) 将模型的batch调整为动态的
 
 ### 导出engine
 
