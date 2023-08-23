@@ -42,7 +42,8 @@ inline unsigned int getElementSize(nvinfer1::DataType t)
 class Inference {
 private:
     bool efficient_ad;                      // 是否使用efficient_ad模型
-    int dynamic_batch_size;                 // 动态batch大小
+    bool dynamic_batch;                     // 是否使用dynamic_batch
+    int max_dim;                            // 最大支持的dim
     MetaData meta{};                        // 超参数
     nvinfer1::IRuntime* trtRuntime;         // runtime
     nvinfer1::ICudaEngine* engine;          // model
@@ -58,11 +59,11 @@ public:
      * @param model_path    模型路径
      * @param meta_path     超参数路径
      * @param efficient_ad  是否使用efficient_ad模型
-     * @param dynamic_batch_size  动态batch大小,非动态batch模型不需要处理
+     * @param dynamic_batch dynamic_batch模型是否使用dynamic_batch
      */
-    Inference(string& model_path, string& meta_path, bool efficient_ad = false, int dynamic_batch_size=1) {
+    Inference(string& model_path, string& meta_path, bool efficient_ad = false, bool dynamic_batch = false) {
         this->efficient_ad = efficient_ad;
-        this->dynamic_batch_size = dynamic_batch_size;
+        this->dynamic_batch = dynamic_batch;
         // 1.读取meta
         this->meta = getJson(meta_path);
         // 2.创建模型
@@ -137,15 +138,18 @@ public:
                 dims = this->context->getBindingDimensions(i);
                 // dynamic batch
                 if ((*dims.d == -1) && mode) {
-                    nvinfer1::Dims minDims = this->engine->getProfileDimensions(i, 0, nvinfer1::OptProfileSelector::kMIN);
-                    nvinfer1::Dims optDims = this->engine->getProfileDimensions(i, 0, nvinfer1::OptProfileSelector::kOPT);
+                    // nvinfer1::Dims minDims = this->engine->getProfileDimensions(i, 0, nvinfer1::OptProfileSelector::kMIN);
+                    // nvinfer1::Dims optDims = this->engine->getProfileDimensions(i, 0, nvinfer1::OptProfileSelector::kOPT);
                     nvinfer1::Dims maxDims = this->engine->getProfileDimensions(i, 0, nvinfer1::OptProfileSelector::kMAX);
-                    // 自己设置的batch必须在最小和最大batch之间
-                    assert(this->dynamic_batch_size >= minDims.d[0] && this->dynamic_batch_size <= maxDims.d[0]);
-                    // 显式设置batch
-                    this->context->setBindingDimensions(i, nvinfer1::Dims4(this->dynamic_batch_size, maxDims.d[1], maxDims.d[2], maxDims.d[3]));
-                    // 设置为最小batch
-                    // context->setBindingDimensions(i, minDims);
+                    this->max_dim = maxDims.d[0];
+                    if (dynamic_batch) {
+                        // 设置为最大batch
+                        context->setBindingDimensions(i, maxDims);
+                    }
+                    else {
+                        // 设置为batch为1
+                        context->setBindingDimensions(i, nvinfer1::Dims4(1, maxDims.d[1], maxDims.d[2], maxDims.d[3]));
+                    }
                     dims = this->context->getBindingDimensions(i);
                 }
 
@@ -168,15 +172,18 @@ public:
 
                 // dynamic batch
                 if ((*dims.d == -1) && (mode == 1)) {
-                    nvinfer1::Dims minDims = this->engine->getProfileShape(name, 0, nvinfer1::OptProfileSelector::kMIN);
-                    nvinfer1::Dims optDims = this->engine->getProfileShape(name, 0, nvinfer1::OptProfileSelector::kOPT);
+                    // nvinfer1::Dims minDims = this->engine->getProfileShape(name, 0, nvinfer1::OptProfileSelector::kMIN);
+                    // nvinfer1::Dims optDims = this->engine->getProfileShape(name, 0, nvinfer1::OptProfileSelector::kOPT);
                     nvinfer1::Dims maxDims = this->engine->getProfileShape(name, 0, nvinfer1::OptProfileSelector::kMAX);
-                    // 自己设置的batch必须在最小和最大batch之间
-                    assert(this->dynamic_batch_size >= minDims.d[0] && this->dynamic_batch_size <= maxDims.d[0]);
-                    // 显式设置batch
-                    this->context->setInputShape(name, nvinfer1::Dims4(this->dynamic_batch_size, maxDims.d[1], maxDims.d[2], maxDims.d[3]));
-                    // 设置为最小batch
-                    // context->setInputShape(name, minDims);
+                    this->max_dim = maxDims.d[0];
+                    if (dynamic_batch) {
+                        // 设置为最大batch
+                        context->setInputShape(name, maxDims);
+                    }
+                    else {
+                        // 设置为batch为1
+                        context->setInputShape(name, nvinfer1::Dims4(1, maxDims.d[1], maxDims.d[2], maxDims.d[3]));
+                    }
                     dims = this->context->getTensorShape(name);
                 }
 
@@ -207,11 +214,11 @@ public:
         cv::Size size = cv::Size(this->meta.infer_size[1], this->meta.infer_size[0]);
         cv::Scalar color = cv::Scalar(0, 0, 0);
         cv::Mat image = cv::Mat(size, CV_8UC3, color);
-        if (this->dynamic_batch_size == 1) {
+        if (this->max_dim == 1) {
             this->infer(image);
         }
         else {
-            vector<cv::Mat> images(dynamic_batch_size, image);
+            vector<cv::Mat> images(max_dim, image);
             this->dynamicBatchInfer(images);
         }
         cout << "warm up finish" << endl;
@@ -353,6 +360,8 @@ public:
      * @return      标准化的并所放到原图热力图和得分
      */
     vector<Result> dynamicBatchInfer(vector<cv::Mat> images) {
+        int images_num = images.size();
+
         // 1.保存图片原始高宽,使用第一张图片,假设图片大小都一致
         this->meta.image_size[0] = images[0].size().height;
         this->meta.image_size[1] = images[0].size().width;
@@ -366,28 +375,28 @@ public:
 
         // 3.infer
         // DMA the input to the GPU,  execute the batch asynchronously, and DMA it back:
-        cudaMemcpy(this->cudaBuffers[0], blob.ptr<float>(), this->bufferSize[0], cudaMemcpyHostToDevice);
+        cudaMemcpy(this->cudaBuffers[0], blob.ptr<float>(), this->bufferSize[0] / this->max_dim * images_num, cudaMemcpyHostToDevice);
         context->executeV2(this->cudaBuffers);
         for (size_t i = 1; i <= this->output_nums; i++) {
-            cudaMemcpy(this->outputs[i - 1], this->cudaBuffers[i], this->bufferSize[i], cudaMemcpyDeviceToHost);
+            cudaMemcpy(this->outputs[i - 1], this->cudaBuffers[i], this->bufferSize[i] / this->max_dim * images_num, cudaMemcpyDeviceToHost);
         }
 
         // 4.获取结果
         vector<cv::Mat> anomaly_maps;
         vector<cv::Mat> pred_scores;
-        int total_infer_length = this->meta.infer_size[0] * this->meta.infer_size[1] * this->dynamic_batch_size;
+        int total_infer_length = this->meta.infer_size[0] * this->meta.infer_size[1] * images_num;
         int infer_length = this->meta.infer_size[0] * this->meta.infer_size[1];
 
-        // vector<float*> temp_results(this->dynamic_batch_size, new float[infer_length]); // 这样初始化会导致多个结果内存地址相同
+        // vector<float*> temp_results(images_num, new float[infer_length]); // 这样初始化会导致多个结果内存地址相同
         vector<float*> temp_results;
-        for (int i = 0; i < this->dynamic_batch_size; i++) {
+        for (int i = 0; i < images_num; i++) {
             temp_results.push_back(new float[infer_length]);
         }
         if (this->output_nums == 1) {
             for (int i = 0; i < total_infer_length; i++) {
                 temp_results[i / infer_length][i % infer_length] = this->outputs[0][i];
             }
-            for (int i = 0; i < this->dynamic_batch_size; i++) {
+            for (int i = 0; i < images_num; i++) {
                 cv::Mat temp_anomaly_map = cv::Mat(cv::Size(this->meta.infer_size[1], this->meta.infer_size[0]), CV_32FC1, temp_results[i]);
                 anomaly_maps.push_back(temp_anomaly_map);
                 double _, maxValue;    // 最大值，最小值
@@ -400,11 +409,11 @@ public:
             for (int i = 0; i < total_infer_length; i++) {
                 temp_results[i / infer_length][i % infer_length] = this->outputs[1][i];
             }
-            for (int i = 0; i < this->dynamic_batch_size; i++) {
+            for (int i = 0; i < images_num; i++) {
                 cv::Mat temp_anomaly_map = cv::Mat(cv::Size(this->meta.infer_size[1], this->meta.infer_size[0]), CV_32FC1, temp_results[i]);
                 anomaly_maps.push_back(temp_anomaly_map);
             }
-            cv::Mat pred_scores_ = cv::Mat(cv::Size(1, 1), CV_32FC(this->dynamic_batch_size), this->outputs[0]);
+            cv::Mat pred_scores_ = cv::Mat(cv::Size(1, 1), CV_32FC(images_num), this->outputs[0]);
             cv::split(pred_scores_, pred_scores);
         }
         else if (this->output_nums == 3) {
@@ -412,7 +421,7 @@ public:
             for (int i = 0; i < total_infer_length; i++) {
                 temp_results[i / infer_length][i % infer_length] = this->outputs[2][i];
             }
-            for (int i = 0; i < this->dynamic_batch_size; i++) {
+            for (int i = 0; i < images_num; i++) {
                 cv::Mat temp_anomaly_map = cv::Mat(cv::Size(this->meta.infer_size[1], this->meta.infer_size[0]), CV_32FC1, temp_results[i]);
                 anomaly_maps.push_back(temp_anomaly_map);
                 double _, maxValue;    // 最大值，最小值
@@ -423,7 +432,7 @@ public:
 
         // 5.后处理,每张图片单独处理
         vector<Result> results;
-        for (int i = 0; i < this->dynamic_batch_size; i++) {
+        for (int i = 0; i < images_num; i++) {
             // 后处理
             vector<cv::Mat> post_mat = post_process(anomaly_maps[i], pred_scores[i], this->meta);
             cv::Mat image = images[i];

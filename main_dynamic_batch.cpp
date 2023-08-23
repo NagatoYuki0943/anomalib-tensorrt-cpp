@@ -10,11 +10,13 @@ int main() {
     string model_path = "D:/ml/code/anomalib/results/efficient_ad/mvtec/bottle/run/weights/openvino/model.engine";
     string meta_path  = "D:/ml/code/anomalib/results/efficient_ad/mvtec/bottle/run/weights/openvino/metadata.json";
     string image_dir = "D:/ml/code/anomalib/datasets/MVTec/bottle/test/broken_large";
-    bool efficient_ad = true;   // 是否使用efficient_ad模型
-    int dynamic_batch_size = 4; // 显式指定batch,要在最小和最大batch之间
+    bool efficient_ad = true;    // 是否使用efficient_ad模型
+    bool dynamic_batch = true;   // 使用dynamic_batch,分配最大batch_size显存
+    int dynamic_batch_size = 2;  // 显式指定batch,要在最小和最大batch之间
+
 
     // 创建推理器
-    auto inference = Inference(model_path, meta_path, efficient_ad, dynamic_batch_size);
+    auto inference = Inference(model_path, meta_path, efficient_ad, dynamic_batch);
 
     // 读取全部图片路径
     vector<cv::String> paths = getImagePaths(image_dir);
