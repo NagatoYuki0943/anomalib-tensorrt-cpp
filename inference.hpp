@@ -218,7 +218,7 @@ public:
             this->infer(image);
         }
         else {
-            vector<cv::Mat> images(max_dim, image);
+            vector<cv::Mat> images(this->max_dim, image);
             this->dynamicBatchInfer(images);
         }
         cout << "warm up finish" << endl;
