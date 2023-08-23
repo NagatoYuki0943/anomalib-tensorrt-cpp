@@ -3,7 +3,7 @@
 
 
 int main() {
-    // patchcore模型训练配置文件删除了center_crop
+    // patchcore模型训练配置文件调整center_crop为 `center_crop: null`
     // trtexec --onnx=model.onnx --saveEngine=model.engine 转换模型
     string model_path = "D:/ml/code/anomalib/results/efficient_ad/mvtec/bottle/run/weights/openvino/model.engine";
     string meta_path  = "D:/ml/code/anomalib/results/efficient_ad/mvtec/bottle/run/weights/openvino/metadata.json";

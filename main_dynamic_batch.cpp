@@ -3,7 +3,7 @@
 
 
 int main() {
-    // patchcore模型训练配置文件删除了center_crop
+    // patchcore模型训练配置文件调整center_crop为 `center_crop: null`
     // trtexec --onnx=model.onnx --saveEngine=model.engine 转换模型
     // 动态batch,model.onnx的batch为动态的                             input为输入名字, 1, 4, 8要手动指定
     // trtexec --onnx=model.onnx --saveEngine=model.engine --minShapes=input:1x3x256x256 --optShapes=input:4x3x256x256 --maxShapes=input:8x3x256x256
