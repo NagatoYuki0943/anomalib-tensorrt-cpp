@@ -106,6 +106,7 @@ public:
         this->trtRuntime = nvinfer1::createInferRuntime(sample::gLogger.getTRTLogger());
         initLibNvInferPlugins(&sample::gLogger, "");
         this->engine = this->trtRuntime->deserializeCudaEngine(cached_engine.data(), cached_engine.size(), nullptr);
+        assert(this->engine != nullptr);
         cout << "deserialize done" << endl;
         /******************** load engine ********************/
 
