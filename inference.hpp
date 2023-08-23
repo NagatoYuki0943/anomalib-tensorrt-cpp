@@ -87,6 +87,9 @@ public:
      * @param model_path    模型路径
      */
     void get_model(string& model_path) {
+        int trt_version = nvinfer1::kNV_TENSORRT_VERSION_IMPL;
+        cout << "trt_version = " << trt_version << endl; // 8601
+
         /******************** load engine ********************/
         string cached_engine;
         fstream file;
@@ -121,35 +124,73 @@ public:
         this->output_nums = nbBindings - 1;  // 假设只有1个输入
 
         for (int i = 0; i < nbBindings; i++) {
-            const char* name = this->engine->getIOTensorName(i);
-            int mode = int(this->engine->getTensorIOMode(name));
-            // cout << "mode: " << mode << endl; // 0:input or output  1:input  2:output
-            nvinfer1::DataType dtype = this->engine->getTensorDataType(name);
-            nvinfer1::Dims dims = this->context->getTensorShape(name);
+            const char* name;
+            int mode;
+            nvinfer1::DataType dtype;
+            nvinfer1::Dims dims;
+            int totalSize;
 
-            // dynamic batch
-            if ((*dims.d == -1) && (mode == 1)) {
-                nvinfer1::Dims minDims = this->engine->getProfileShape(name, 0, nvinfer1::OptProfileSelector::kMIN);
-                nvinfer1::Dims optDims = this->engine->getProfileShape(name, 0, nvinfer1::OptProfileSelector::kOPT);
-                nvinfer1::Dims maxDims = this->engine->getProfileShape(name, 0, nvinfer1::OptProfileSelector::kMAX);
-                // 自己设置的batch必须在最小和最大batch之间
-                assert(this->dynamic_batch_size >= minDims.d[0] && this->dynamic_batch_size <= maxDims.d[0]);
-                // 显式设置batch
-                this->context->setInputShape(name, nvinfer1::Dims4(this->dynamic_batch_size, maxDims.d[1], maxDims.d[2], maxDims.d[3]));
-                // 设置为最小batch
-                // context->setInputShape(name, minDims);
+            if (trt_version < 8500) {
+                mode = int(this->engine->bindingIsInput(i));
+                name = this->engine->getBindingName(i);
+                dtype = this->engine->getBindingDataType(i);
+                dims = this->context->getBindingDimensions(i);
+                // dynamic batch
+                if ((*dims.d == -1) && mode) {
+                    nvinfer1::Dims minDims = this->engine->getProfileDimensions(i, 0, nvinfer1::OptProfileSelector::kMIN);
+                    nvinfer1::Dims optDims = this->engine->getProfileDimensions(i, 0, nvinfer1::OptProfileSelector::kOPT);
+                    nvinfer1::Dims maxDims = this->engine->getProfileDimensions(i, 0, nvinfer1::OptProfileSelector::kMAX);
+                    // 自己设置的batch必须在最小和最大batch之间
+                    assert(this->dynamic_batch_size >= minDims.d[0] && this->dynamic_batch_size <= maxDims.d[0]);
+                    // 显式设置batch
+                    this->context->setBindingDimensions(i, nvinfer1::Dims4(this->dynamic_batch_size, maxDims.d[1], maxDims.d[2], maxDims.d[3]));
+                    // 设置为最小batch
+                    // context->setBindingDimensions(i, minDims);
+                    dims = this->context->getBindingDimensions(i);
+                }
+
+                totalSize = volume(dims) * getElementSize(dtype);
+                this->bufferSize[i] = totalSize;
+                cudaMalloc(&this->cudaBuffers[i], totalSize);   // 分配显存空间
+
+                if (!mode) {                                    // 分配输出内存空间
+                    int outSize = int(totalSize / sizeof(float));
+                    float* output = new float[outSize];
+                    this->outputs.push_back(output);
+                }
+            }
+            else {
+                name = this->engine->getIOTensorName(i);
+                mode = int(this->engine->getTensorIOMode(name));
+                // cout << "mode: " << mode << endl; // 0:input or output  1:input  2:output
+                dtype = this->engine->getTensorDataType(name);
                 dims = this->context->getTensorShape(name);
+
+                // dynamic batch
+                if ((*dims.d == -1) && (mode == 1)) {
+                    nvinfer1::Dims minDims = this->engine->getProfileShape(name, 0, nvinfer1::OptProfileSelector::kMIN);
+                    nvinfer1::Dims optDims = this->engine->getProfileShape(name, 0, nvinfer1::OptProfileSelector::kOPT);
+                    nvinfer1::Dims maxDims = this->engine->getProfileShape(name, 0, nvinfer1::OptProfileSelector::kMAX);
+                    // 自己设置的batch必须在最小和最大batch之间
+                    assert(this->dynamic_batch_size >= minDims.d[0] && this->dynamic_batch_size <= maxDims.d[0]);
+                    // 显式设置batch
+                    this->context->setInputShape(name, nvinfer1::Dims4(this->dynamic_batch_size, maxDims.d[1], maxDims.d[2], maxDims.d[3]));
+                    // 设置为最小batch
+                    // context->setInputShape(name, minDims);
+                    dims = this->context->getTensorShape(name);
+                }
+
+                totalSize = volume(dims) * getElementSize(dtype);
+                this->bufferSize[i] = totalSize;
+                cudaMalloc(&this->cudaBuffers[i], totalSize);   // 分配显存空间
+
+                if (mode == 2) {                                // 分配输出内存空间
+                    int outSize = int(totalSize / sizeof(float));
+                    float* output = new float[outSize];
+                    this->outputs.push_back(output);
+                }
             }
 
-            int totalSize = volume(dims) * getElementSize(dtype);
-            this->bufferSize[i] = totalSize;
-            cudaMalloc(&this->cudaBuffers[i], totalSize); // 分配显存空间
-
-            if (mode == 2) {                         // 分配输出内存空间
-                int outSize = int(totalSize / sizeof(float));
-                float* output = new float[outSize];
-                this->outputs.push_back(output);
-            }
             fprintf(stderr, "name: %s, mode: %d, dims: [%d, %d, %d, %d], totalSize: %d\n", name, mode, dims.d[0], dims.d[1], dims.d[2], dims.d[3], totalSize);
         }
         /********************** binding **********************/
