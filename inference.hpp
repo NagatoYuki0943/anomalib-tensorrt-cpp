@@ -120,24 +120,24 @@ public:
         this->output_nums = nbBindings - 1;  // 假设只有1个输入
 
         for (int i = 0; i < nbBindings; i++) {
-            string name = this->engine->getIOTensorName(i);
-            int mode = int(this->engine->getTensorIOMode(name.c_str()));
+            const char* name = this->engine->getIOTensorName(i);
+            int mode = int(this->engine->getTensorIOMode(name));
             // cout << "mode: " << mode << endl; // 0:input or output  1:input  2:output
-            nvinfer1::DataType dtype = this->engine->getTensorDataType(name.c_str());
-            nvinfer1::Dims dims = this->context->getTensorShape(name.c_str());
+            nvinfer1::DataType dtype = this->engine->getTensorDataType(name);
+            nvinfer1::Dims dims = this->context->getTensorShape(name);
 
             // dynamic batch
             if ((*dims.d == -1) && (mode == 1)) {
-                nvinfer1::Dims minDims = this->engine->getProfileShape(name.c_str(), 0, nvinfer1::OptProfileSelector::kMIN);
-                nvinfer1::Dims optDims = this->engine->getProfileShape(name.c_str(), 0, nvinfer1::OptProfileSelector::kOPT);
-                nvinfer1::Dims maxDims = this->engine->getProfileShape(name.c_str(), 0, nvinfer1::OptProfileSelector::kMAX);
+                nvinfer1::Dims minDims = this->engine->getProfileShape(name, 0, nvinfer1::OptProfileSelector::kMIN);
+                nvinfer1::Dims optDims = this->engine->getProfileShape(name, 0, nvinfer1::OptProfileSelector::kOPT);
+                nvinfer1::Dims maxDims = this->engine->getProfileShape(name, 0, nvinfer1::OptProfileSelector::kMAX);
                 // 自己设置的batch必须在最小和最大batch之间
                 assert(this->dynamic_batch_size >= minDims.d[0] && this->dynamic_batch_size <= maxDims.d[0]);
                 // 显式设置batch
-                this->context->setInputShape(name.c_str(), nvinfer1::Dims4(this->dynamic_batch_size, maxDims.d[1], maxDims.d[2], maxDims.d[3]));
+                this->context->setInputShape(name, nvinfer1::Dims4(this->dynamic_batch_size, maxDims.d[1], maxDims.d[2], maxDims.d[3]));
                 // 设置为最小batch
-                // context->setInputShape(name.c_str(), minDims);
-                dims = this->context->getTensorShape(name.c_str());
+                // context->setInputShape(name, minDims);
+                dims = this->context->getTensorShape(name);
             }
 
             int totalSize = volume(dims) * getElementSize(dtype);
@@ -149,7 +149,7 @@ public:
                 float* output = new float[outSize];
                 this->outputs.push_back(output);
             }
-            fprintf(stderr, "name: %s, mode: %d, dims: [%d, %d, %d, %d], totalSize: %d\n", name.c_str(), mode, dims.d[0], dims.d[1], dims.d[2], dims.d[3], totalSize);
+            fprintf(stderr, "name: %s, mode: %d, dims: [%d, %d, %d, %d], totalSize: %d\n", name, mode, dims.d[0], dims.d[1], dims.d[2], dims.d[3], totalSize);
         }
         /********************** binding **********************/
 
