@@ -233,35 +233,31 @@ public:
     }
 
     /**
-     * 推理单张图片
-     * @param image 原始图片
+     * 单张图片推理
+     * @param image    RGB图片
      * @return      标准化的并所放到原图热力图和得分
      */
-    cv::Mat single(string& image_path, string& save_dir) {
-        // 1.读取图片
-        cv::Mat image = readImage(image_path);
-
+    Result single(cv::Mat& image) {
         // time
         auto start = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-        // 2.推理单张图片
+        // 1.推理单张图片
         Result result = this->infer(image);
         cout << "score: " << result.score << endl;
 
-        // 3.生成其他图片(mask,mask边缘,热力图和原图的叠加)
+        // 2.生成其他图片(mask,mask边缘,热力图和原图的叠加)
         vector<cv::Mat> images = gen_images(image, result.anomaly_map, result.score);
         // time
         auto end = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         cout << "infer time: " << end - start << " ms" << endl;
 
-        // 4.保存显示图片
+        // 3.保存显示图片
         // 将mask转化为3通道,不然没法拼接图片
         cv::applyColorMap(images[0], images[0], cv::ColormapTypes::COLORMAP_JET);
         // 拼接图片
         cv::Mat res;
         cv::hconcat(images, res);
-        saveScoreAndImages(result.score, res, image_path, save_dir);
 
-        return res;
+        return Result{ res, result.score };
     }
 
     /**
