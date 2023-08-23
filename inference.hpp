@@ -128,16 +128,16 @@ public:
 
             // dynamic batch
             if ((*dims.d == -1) && (mode == 1)) {
-                nvinfer1::Dims minDims = engine->getProfileShape(name.c_str(), 0, nvinfer1::OptProfileSelector::kMIN);
-                nvinfer1::Dims optDims = engine->getProfileShape(name.c_str(), 0, nvinfer1::OptProfileSelector::kOPT);
-                nvinfer1::Dims maxDims = engine->getProfileShape(name.c_str(), 0, nvinfer1::OptProfileSelector::kMAX);
+                nvinfer1::Dims minDims = this->engine->getProfileShape(name.c_str(), 0, nvinfer1::OptProfileSelector::kMIN);
+                nvinfer1::Dims optDims = this->engine->getProfileShape(name.c_str(), 0, nvinfer1::OptProfileSelector::kOPT);
+                nvinfer1::Dims maxDims = this->engine->getProfileShape(name.c_str(), 0, nvinfer1::OptProfileSelector::kMAX);
                 // 自己设置的batch必须在最小和最大batch之间
                 assert(this->dynamic_batch_size >= minDims.d[0] && this->dynamic_batch_size <= maxDims.d[0]);
                 // 显式设置batch
-                context->setInputShape(name.c_str(), nvinfer1::Dims4(this->dynamic_batch_size, maxDims.d[1], maxDims.d[2], maxDims.d[3]));
+                this->context->setInputShape(name.c_str(), nvinfer1::Dims4(this->dynamic_batch_size, maxDims.d[1], maxDims.d[2], maxDims.d[3]));
                 // 设置为最小batch
                 // context->setInputShape(name.c_str(), minDims);
-                dims = context->getTensorShape(name.c_str());
+                dims = this->context->getTensorShape(name.c_str());
             }
 
             int totalSize = volume(dims) * getElementSize(dtype);
@@ -193,7 +193,7 @@ public:
         // DMA the input to the GPU,  execute the batch asynchronously, and DMA it back:
         cudaMemcpy(this->cudaBuffers[0], blob.ptr<float>(), this->bufferSize[0], cudaMemcpyHostToDevice);
         // cudaMemcpyAsync(this->cudaBuffers[0], image.ptr<float>(), this->bufferSize[0], cudaMemcpyHostToDevice, this->stream);  // 异步没有把数据移动上去,很奇怪
-        context->executeV2(this->cudaBuffers);
+        this->context->executeV2(this->cudaBuffers);
         for (size_t i = 1; i <= this->output_nums; i++) {
             cudaMemcpy(this->outputs[i-1], this->cudaBuffers[i], this->bufferSize[i], cudaMemcpyDeviceToHost);
             // cudaMemcpyAsync(this->outputs[i-1], this->cudaBuffers[i], this->bufferSize[i], cudaMemcpyDeviceToHost, this->stream);
@@ -398,6 +398,10 @@ public:
             cv::Mat res;
             cv::hconcat(images3, res);
             results.push_back(Result{ res , score });
+        }
+
+        for (float* fpoint : temp_results) {
+            delete[] fpoint;
         }
 
         // 6.返回结果
