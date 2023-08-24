@@ -43,6 +43,7 @@ class Inference {
 private:
     bool efficient_ad;                      // 是否使用efficient_ad模型
     bool dynamic_batch;                     // 是否使用dynamic_batch
+    int min_dim;                            // 最小支持的dim
     int max_dim;                            // 最大支持的dim
     MetaData meta{};                        // 超参数
     nvinfer1::IRuntime* trtRuntime;         // runtime
@@ -138,7 +139,8 @@ public:
                 dims = this->context->getBindingDimensions(i);
                 // dynamic batch
                 if ((*dims.d == -1) && mode) {
-                    // nvinfer1::Dims minDims = this->engine->getProfileDimensions(i, 0, nvinfer1::OptProfileSelector::kMIN);
+                    nvinfer1::Dims minDims = this->engine->getProfileDimensions(i, 0, nvinfer1::OptProfileSelector::kMIN);
+                    this->min_dim = minDims.d[0];
                     // nvinfer1::Dims optDims = this->engine->getProfileDimensions(i, 0, nvinfer1::OptProfileSelector::kOPT);
                     nvinfer1::Dims maxDims = this->engine->getProfileDimensions(i, 0, nvinfer1::OptProfileSelector::kMAX);
                     this->max_dim = maxDims.d[0];
@@ -172,7 +174,8 @@ public:
 
                 // dynamic batch
                 if ((*dims.d == -1) && (mode == 1)) {
-                    // nvinfer1::Dims minDims = this->engine->getProfileShape(name, 0, nvinfer1::OptProfileSelector::kMIN);
+                    nvinfer1::Dims minDims = this->engine->getProfileShape(name, 0, nvinfer1::OptProfileSelector::kMIN);
+                    this->min_dim = minDims.d[0];
                     // nvinfer1::Dims optDims = this->engine->getProfileShape(name, 0, nvinfer1::OptProfileSelector::kOPT);
                     nvinfer1::Dims maxDims = this->engine->getProfileShape(name, 0, nvinfer1::OptProfileSelector::kMAX);
                     this->max_dim = maxDims.d[0];
@@ -361,6 +364,7 @@ public:
      */
     vector<Result> dynamicBatchInfer(vector<cv::Mat> images) {
         int images_num = images.size();
+        assert(images_num >= this->min_dim && images_num <= this->max_dim);
 
         // 1.保存图片原始高宽,使用第一张图片,假设图片大小都一致
         this->meta.image_size[0] = images[0].size().height;
