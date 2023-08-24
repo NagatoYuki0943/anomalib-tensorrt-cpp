@@ -201,7 +201,7 @@ public:
                 }
             }
 
-            fprintf(stderr, "name: %s, mode: %d, dims: [%d, %d, %d, %d], totalSize: %d\n", name, mode, dims.d[0], dims.d[1], dims.d[2], dims.d[3], totalSize);
+            fprintf(stderr, "name: %s, mode: %d, dims: [%d, %d, %d, %d], totalSize: %d Byte\n", name, mode, dims.d[0], dims.d[1], dims.d[2], dims.d[3], totalSize);
         }
         /********************** binding **********************/
 
