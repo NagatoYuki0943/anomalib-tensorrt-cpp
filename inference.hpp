@@ -75,9 +75,10 @@ public:
 
     ~Inference() {
         // 析构顺序很重要
-        this->context->destroy();
-        this->engine->destroy();
-        this->trtRuntime->destroy();
+        // https://docs.nvidia.com/deeplearning/tensorrt/api/c_api/classnvinfer1_1_1_i_execution_context.html#ab3ace89a0eb08cd7e4b4cba7bedac5a2
+        delete this->context;
+        delete this->engine;
+        delete this->trtRuntime;
 
         for (float* fpoint : this->outputs) {
             delete[] fpoint;
