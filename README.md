@@ -19,6 +19,19 @@ trtexec --onnx=model.onnx --saveEngine=model.engine
 trtexec --onnx=model.onnx --saveEngine=model.engine --minShapes=input:1x3x256x256 --optShapes=input:4x3x256x256 --maxShapes=input:8x3x256x256
 ```
 
+# 注意事项
+
+## patchcore
+> patchcore模型训练配置文件需要调整center_crop为 `center_crop: null`
+> 只缩放图片，不再剪裁图片
+>
+
+## efficient_ad
+
+> 使用efficient_ad模型需要给 `Inference` 添加 `bool efficient_ad = true`参数
+> 原因是efficient_ad模型的标准化在模型中做了，不需要在外部再做
+> 
+
 # 其他推理方式
 
 > [anomalib-onnxruntime-cpp](https://github.com/NagatoYuki0943/anomalib-onnxruntime-cpp)
