@@ -43,8 +43,8 @@ class Inference {
 private:
     bool efficient_ad;                      // 是否使用efficient_ad模型
     bool dynamic_batch;                     // 是否使用dynamic_batch
-    int min_dim;                            // 最小支持的dim
-    int max_dim;                            // 最大支持的dim
+    int min_batch = 1;                        // 最小支持的dim
+    int max_batch = 1;                      // 最大支持的dim
     MetaData meta{};                        // 超参数
     nvinfer1::IRuntime* trtRuntime;         // runtime
     nvinfer1::ICudaEngine* engine;          // model
@@ -141,11 +141,11 @@ public:
                 // dynamic batch
                 if ((*dims.d == -1) && mode) {
                     nvinfer1::Dims minDims = this->engine->getProfileDimensions(i, 0, nvinfer1::OptProfileSelector::kMIN);
-                    this->min_dim = minDims.d[0];
-                    // nvinfer1::Dims optDims = this->engine->getProfileDimensions(i, 0, nvinfer1::OptProfileSelector::kOPT);
+                    nvinfer1::Dims optDims = this->engine->getProfileDimensions(i, 0, nvinfer1::OptProfileSelector::kOPT);
                     nvinfer1::Dims maxDims = this->engine->getProfileDimensions(i, 0, nvinfer1::OptProfileSelector::kMAX);
-                    this->max_dim = maxDims.d[0];
-                    if (dynamic_batch) {
+                    if (this->dynamic_batch) {
+                        this->min_batch = minDims.d[0];
+                        this->max_batch = maxDims.d[0];
                         // 设置为最大batch
                         context->setBindingDimensions(i, maxDims);
                     }
@@ -176,11 +176,11 @@ public:
                 // dynamic batch
                 if ((*dims.d == -1) && (mode == 1)) {
                     nvinfer1::Dims minDims = this->engine->getProfileShape(name, 0, nvinfer1::OptProfileSelector::kMIN);
-                    this->min_dim = minDims.d[0];
-                    // nvinfer1::Dims optDims = this->engine->getProfileShape(name, 0, nvinfer1::OptProfileSelector::kOPT);
+                    nvinfer1::Dims optDims = this->engine->getProfileShape(name, 0, nvinfer1::OptProfileSelector::kOPT);
                     nvinfer1::Dims maxDims = this->engine->getProfileShape(name, 0, nvinfer1::OptProfileSelector::kMAX);
-                    this->max_dim = maxDims.d[0];
-                    if (dynamic_batch) {
+                    if (this->dynamic_batch) {
+                        this->min_batch = minDims.d[0];
+                        this->max_batch = maxDims.d[0];
                         // 设置为最大batch
                         context->setInputShape(name, maxDims);
                     }
@@ -218,11 +218,11 @@ public:
         cv::Size size = cv::Size(this->meta.infer_size[1], this->meta.infer_size[0]);
         cv::Scalar color = cv::Scalar(0, 0, 0);
         cv::Mat image = cv::Mat(size, CV_8UC3, color);
-        if (this->max_dim == 1) {
+        if (this->max_batch == 1) {
             this->infer(image);
         }
         else {
-            vector<cv::Mat> images(this->max_dim, image);
+            vector<cv::Mat> images(this->max_batch, image);
             this->dynamicBatchInfer(images);
         }
         cout << "warm up finish" << endl;
@@ -365,7 +365,7 @@ public:
      */
     vector<Result> dynamicBatchInfer(vector<cv::Mat> images) {
         int images_num = images.size();
-        assert(images_num >= this->min_dim && images_num <= this->max_dim);
+        assert(images_num >= this->min_batch && images_num <= this->max_batch);
 
         // 1.保存图片原始高宽,使用第一张图片,假设图片大小都一致
         this->meta.image_size[0] = images[0].size().height;
@@ -380,10 +380,10 @@ public:
 
         // 3.infer
         // DMA the input to the GPU,  execute the batch asynchronously, and DMA it back:
-        cudaMemcpy(this->cudaBuffers[0], blob.ptr<float>(), this->bufferSize[0] / this->max_dim * images_num, cudaMemcpyHostToDevice);
+        cudaMemcpy(this->cudaBuffers[0], blob.ptr<float>(), this->bufferSize[0] / this->max_batch * images_num, cudaMemcpyHostToDevice);
         context->executeV2(this->cudaBuffers);
         for (size_t i = 1; i <= this->output_nums; i++) {
-            cudaMemcpy(this->outputs[i - 1], this->cudaBuffers[i], this->bufferSize[i] / this->max_dim * images_num, cudaMemcpyDeviceToHost);
+            cudaMemcpy(this->outputs[i - 1], this->cudaBuffers[i], this->bufferSize[i] / this->max_batch * images_num, cudaMemcpyDeviceToHost);
         }
 
         // 4.获取结果

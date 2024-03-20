@@ -11,7 +11,7 @@ int main() {
     string meta_path  = "D:/ml/code/anomalib/results/efficient_ad/mvtec/bottle/run/weights/openvino/metadata.json";
     string image_dir = "D:/ml/code/anomalib/datasets/MVTec/bottle/test/broken_large";
     bool efficient_ad = true;    // 是否使用efficient_ad模型
-    bool dynamic_batch = true;   // 使用dynamic_batch,分配最大batch_size显存
+    bool dynamic_batch = true;   // 使用dynamic_batch,分配最大batch_size显存,如果用使用dynamic模型并且使用 dynamicBatchInfer 函数要设置为 true,使用 single 函数要设置为 false
     int dynamic_batch_size = 2;  // 显式指定batch,要在最小和最大batch之间
 
 
