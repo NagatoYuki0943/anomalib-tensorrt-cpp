@@ -43,7 +43,7 @@ class Inference {
 private:
     bool efficient_ad;                      // 是否使用efficient_ad模型
     bool dynamic_batch;                     // 是否使用dynamic_batch
-    int min_batch = 1;                        // 最小支持的dim
+    int min_batch = 1;                      // 最小支持的dim
     int max_batch = 1;                      // 最大支持的dim
     MetaData meta{};                        // 超参数
     nvinfer1::IRuntime* trtRuntime;         // runtime
