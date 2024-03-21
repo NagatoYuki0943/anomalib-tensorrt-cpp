@@ -166,6 +166,9 @@ cv::Mat compute_mask(cv::Mat& anomaly_map, float threshold, int kernel_size) {
     // 缩放到255,转化为uint
     mask.convertTo(mask, CV_8UC1, 255, 0);
 
+    // 灰度图转换为bgr
+    cv::cvtColor(mask, mask, cv::ColorConversionCodes::COLOR_GRAY2BGR);
+
     return mask;
 }
 
@@ -198,13 +201,17 @@ vector<cv::Mat> gen_images(cv::Mat& image, cv::Mat& anomaly_map, float score, fl
     // 1.计算mask
     cv::Mat mask = compute_mask(anomaly_map, threshold);
 
-    // 2.计算mask外边界
+    // 2.通过mask截取图片
+    cv::Mat mask_image;
+    cv::bitwise_and(image, mask, mask_image);
+
+    // 3.计算mask外边界
     cv::Mat border = gen_mask_border(mask, image);
 
-    // 3.叠加原图和热力图
+    // 4.叠加原图和热力图
     cv::Mat superimposed_map = superimposeAnomalyMap(anomaly_map, image);
 
-    // 4.给图片添加分数
+    // 5.给图片添加分数
     superimposed_map = addLabel(superimposed_map, score);
-    return vector<cv::Mat>{mask, border, superimposed_map};
+    return vector<cv::Mat>{mask, mask_image, border, superimposed_map};
 }

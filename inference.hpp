@@ -297,15 +297,13 @@ public:
         Result result = this->infer(image);
         cout << "score: " << result.score << endl;
 
-        // 2.生成其他图片(mask,mask边缘,热力图和原图的叠加)
+        // 2.生成其他图片(mask,mask抠图,mask边缘,热力图和原图的叠加)
         vector<cv::Mat> images = gen_images(image, result.anomaly_map, result.score);
         // time
         auto end = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         cout << "infer time: " << end - start << " ms" << endl;
 
         // 3.保存显示图片
-        // 将mask转化为3通道,不然没法拼接图片
-        cv::applyColorMap(images[0], images[0], cv::ColormapTypes::COLORMAP_JET);
         // 拼接图片
         cv::Mat res;
         cv::hconcat(images, res);
@@ -333,7 +331,7 @@ public:
             Result result = this->infer(image);
             cout << "score: " << result.score << endl;
 
-            // 4.生成其他图片(mask,mask边缘,热力图和原图的叠加)
+            // 4.生成其他图片(mask,mask抠图,mask边缘,热力图和原图的叠加)
             vector<cv::Mat> images = gen_images(image, result.anomaly_map, result.score);
             // time
             auto end = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
@@ -341,8 +339,6 @@ public:
             times.push_back(end - start);
 
             // 5.保存图片
-            // 将mask转化为3通道,不然没法拼接图片
-            cv::applyColorMap(images[0], images[0], cv::ColormapTypes::COLORMAP_JET);
             // 拼接图片
             cv::Mat res;
             cv::hconcat(images, res);
@@ -444,15 +440,12 @@ public:
             cv::Mat anomaly_map = post_mat[0];
             float score = post_mat[1].at<float>(0, 0);
 
-            // 生成其他图片(mask,mask边缘,热力图和原图的叠加)
-            vector<cv::Mat> images3 = gen_images(image, anomaly_map, score);
-
-            // 将mask转化为3通道,不然没法拼接图片
-            cv::applyColorMap(images3[0], images3[0], cv::ColormapTypes::COLORMAP_JET);
+            // 生成其他图片(mask,mask抠图,mask边缘,热力图和原图的叠加)
+            vector<cv::Mat> images = gen_images(image, anomaly_map, score);
 
             // 拼接图片
             cv::Mat res;
-            cv::hconcat(images3, res);
+            cv::hconcat(images, res);
             results.push_back(Result{ res , score });
         }
 
