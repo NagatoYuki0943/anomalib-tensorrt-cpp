@@ -178,9 +178,11 @@ cv::Mat gen_mask_border(cv::Mat& mask, cv::Mat& image) {
     cv::Mat g = b.clone();
     cv::Mat r = b.clone();
 
-    // auto kernel = cv::getStructuringElement(cv::MorphShapes::MORPH_ELLIPSE, {3, 3}, {-1, -1});
-    // cv::morphologyEx(mask, mask_dilation, cv::MorphTypes::MORPH_CLOSE, kernel, {-1, -1}, 1);
     cv::Canny(mask, r, 128, 255, 3, false);
+
+    // 加粗边缘线条 通过 {5, 5} 的大小可以调整线条粗细
+    auto kernel = cv::getStructuringElement(cv::MorphShapes::MORPH_ELLIPSE, {5, 5}, {-1, -1});
+    cv::morphologyEx(r, r, cv::MorphTypes::MORPH_DILATE, kernel, {-1, -1}, 1);
 
     // 整合为3通道图片
     vector<cv::Mat> rgb{ b, g, r };

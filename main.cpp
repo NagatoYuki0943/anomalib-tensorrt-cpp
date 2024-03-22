@@ -5,10 +5,10 @@
 int main() {
     // patchcore模型训练配置文件调整center_crop为 `center_crop: null`
     // trtexec --onnx=model.onnx --saveEngine=model.engine 转换模型
-    string model_path = "D:/ml/code/anomalib/efficient_ad/model.engine";
-    string meta_path = "D:/ml/code/anomalib/efficient_ad/metadata.json";
-    string image_path = "D:/ml/code/anomalib/000.png";
-    string image_dir = "D:/ml/code/anomalib/bottle/test/broken_large";
+    string model_path = "D:/ml/code/anomalib/results/efficient_ad/mvtec/bottle/run/weights/openvino/model.engine";
+    string meta_path  = "D:/ml/code/anomalib/results/efficient_ad/mvtec/bottle/run/weights/openvino/metadata.json";
+    string image_path = "D:/ml/code/anomalib/datasets/MVTec/bottle/test/broken_large/000.png";
+    string image_dir  = "D:/ml/code/anomalib/datasets/MVTec/bottle/test/broken_large";
     string save_dir   = "D:/ml/code/anomalib-tensorrt-cpp/result"; // 注意目录不会自动创建,要手动创建才会保存
     bool efficient_ad = true; // 是否使用efficient_ad模型
 

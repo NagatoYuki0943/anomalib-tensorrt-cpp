@@ -66,7 +66,7 @@ int main() {
     cv::Mat image = readImage(image_path);
     Result result = inference.single(image);
     saveScoreAndImages(result.score, result.anomaly_map, image_path, save_dir);
-    cv::resize(result.anomaly_map, result.anomaly_map, { 1500, 500 });
+    cv::resize(result.anomaly_map, result.anomaly_map, { 2000, 500 });
     cv::imshow("result", result.anomaly_map);
     cv::waitKey(0);
 
@@ -148,7 +148,7 @@ int main() {
     // 查看结果
     for (int i = 0; i < dynamic_batch_size; i++) {
         cout << results[i].score << endl;
-        cv::resize(results[i].anomaly_map, results[i].anomaly_map, { 1500, 500 });
+        cv::resize(results[i].anomaly_map, results[i].anomaly_map, { 2000, 500 });
         cv::imshow(std::to_string(i), results[i].anomaly_map);
     }
 
