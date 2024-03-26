@@ -315,8 +315,8 @@ public:
     /**
      * 多张图片推理
      * @param image_dir 图片文件夹路径
-     * @param threshold 热力图二值化阈值
      * @param save_dir  保存路径
+     * @param threshold 热力图二值化阈值
      */
     void multi(string& image_dir, string& save_dir, float threshold = 0.5) {
         // 1.读取全部图片路径
