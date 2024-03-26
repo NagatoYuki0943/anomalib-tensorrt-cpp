@@ -287,10 +287,11 @@ public:
 
     /**
      * 单张图片推理
-     * @param image    RGB图片
-     * @return      标准化的并所放到原图热力图和得分
+     * @param image     RGB图片
+     * @param threshold 热力图二值化阈值
+     * @return          标准化的并所放到原图热力图和得分
      */
-    Result single(cv::Mat& image) {
+    Result single(cv::Mat& image, float threshold = 0.5) {
         // time
         auto start = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         // 1.推理单张图片
@@ -298,7 +299,7 @@ public:
         cout << "score: " << result.score << endl;
 
         // 2.生成其他图片(mask,mask抠图,mask边缘,热力图和原图的叠加)
-        vector<cv::Mat> images = gen_images(image, result.anomaly_map, result.score);
+        vector<cv::Mat> images = gen_images(image, result.anomaly_map, result.score, threshold);
         // time
         auto end = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         cout << "infer time: " << end - start << " ms" << endl;
@@ -314,9 +315,10 @@ public:
     /**
      * 多张图片推理
      * @param image_dir 图片文件夹路径
+     * @param threshold 热力图二值化阈值
      * @param save_dir  保存路径
      */
-    void multi(string& image_dir, string& save_dir) {
+    void multi(string& image_dir, string& save_dir, float threshold = 0.5) {
         // 1.读取全部图片路径
         vector<cv::String> paths = getImagePaths(image_dir);
 
@@ -332,7 +334,7 @@ public:
             cout << "score: " << result.score << endl;
 
             // 4.生成其他图片(mask,mask抠图,mask边缘,热力图和原图的叠加)
-            vector<cv::Mat> images = gen_images(image, result.anomaly_map, result.score);
+            vector<cv::Mat> images = gen_images(image, result.anomaly_map, result.score, threshold);
             // time
             auto end = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
             cout << "infer time: " << end - start << " ms" << endl;
@@ -356,10 +358,11 @@ public:
      * 动态batch推理,要保证输入图片的大小都相同
      * 图片前后处理是顺序进行的,推理是batch推理
      *
-     * @param image 原始图片
-     * @return      标准化的并所放到原图热力图和得分
+     * @param image     原始图片
+     * @param threshold 热力图二值化阈值
+     * @return          标准化的并所放到原图热力图和得分
      */
-    vector<Result> dynamicBatchInfer(vector<cv::Mat> images) {
+    vector<Result> dynamicBatchInfer(vector<cv::Mat> images, float threshold = 0.5) {
         int images_num = images.size();
         assert(images_num >= this->min_batch && images_num <= this->max_batch);
 
@@ -441,7 +444,7 @@ public:
             float score = post_mat[1].at<float>(0, 0);
 
             // 生成其他图片(mask,mask抠图,mask边缘,热力图和原图的叠加)
-            vector<cv::Mat> images = gen_images(image, anomaly_map, score);
+            vector<cv::Mat> images = gen_images(image, anomaly_map, score, threshold);
 
             // 拼接图片
             cv::Mat res;
