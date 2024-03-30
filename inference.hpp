@@ -79,7 +79,13 @@ public:
         delete this->context;
         delete this->engine;
         delete this->trtRuntime;
+        
+        // 销毁分配的gpu显存
+        for (auto buffer : this->cudaBuffers) {
+            cudaFree(buffer);
+        }
 
+        // 销毁分配主机内存
         for (float* fpoint : this->outputs) {
             delete[] fpoint;
         }
