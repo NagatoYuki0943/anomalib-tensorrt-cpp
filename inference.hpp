@@ -41,8 +41,8 @@ inline unsigned int getElementSize(nvinfer1::DataType t)
 
 class Inference {
 private:
-    bool efficient_ad;                      // 是否使用efficient_ad模型
-    bool dynamic_batch;                     // 是否使用dynamic_batch
+    bool efficient_ad = false;              // 是否使用efficient_ad模型
+    bool dynamic_batch = false;             // 是否使用dynamic_batch
     int min_batch = 1;                      // 最小支持的dim
     int max_batch = 1;                      // 最大支持的dim
     MetaData meta{};                        // 超参数
@@ -79,7 +79,7 @@ public:
         delete this->context;
         delete this->engine;
         delete this->trtRuntime;
-        
+
         // 销毁分配的gpu显存
         for (auto buffer : this->cudaBuffers) {
             cudaFree(buffer);
